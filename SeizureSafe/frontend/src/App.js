@@ -1,32 +1,87 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import mqtt from 'mqtt';
+import './App.css';
 
 function App() {
-  const [heartRate, setHeartRate] = useState(null);
-  const [fallDetected, setFallDetected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('Disconnected');
+  const [braceletData, setBraceletData] = useState({
+    heart_rate: '--',
+    previous_heart_rate: '--',
+    fall_detected: false,
+    seizure_detected: false,
+    battery: 100,
+    timestamp: '--:--:--'
+  });
+  
+  const audioRef = useRef(null);
 
   useEffect(() => {
-    // Connect to the MQTT broker
-    const client = mqtt.connect('ws://broker.emqx.io'); 
-    // On connect, subscribe to the topics
+    // Create audio element for alerts
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    audioRef.current = audio;
+    
+    // MQTT connection options
+    const options = {
+      protocol: 'wss',
+      clientId: 'frontend_' + Math.random().toString(16).substr(2, 8),
+      username: 'ellenmcintyre123',
+      password: 'Happy1234a!*',
+      clean: true,
+      rejectUnauthorized: false,
+      reconnectPeriod: 2000,
+      connectTimeout: 5000
+    };
+
+    console.log('Connecting to MQTT broker...');
+    const client = mqtt.connect('wss://ed733e7d.ala.eu-central-1.emqxsl.com:8084/mqtt', options);
+
     client.on('connect', () => {
       console.log('Connected to MQTT broker');
-      client.subscribe('seizureSafe/heartRate');  
-      client.subscribe('seizureSafe/fallDetected'); 
+      setConnectionStatus('Connected');
+      client.subscribe('seizureSafe/data', (err) => {
+        if (err) {
+          console.error('Subscribe error:', err);
+        } else {
+          console.log('Successfully subscribed to data topic');
+        }
+      });
     });
 
-    // Listen for heart rate data
     client.on('message', (topic, message) => {
-      if (topic === 'seizureSafe/heartRate') {
-        // Parse the heart rate message and update state
-        setHeartRate(Number(message.toString()));
-      } else if (topic === 'seizureSafe/fallDetected') {
-        // Parse the fall detection message and update state
-        setFallDetected(message.toString() === 'true');
+      try {
+        const data = JSON.parse(message.toString());
+        console.log('Received data:', data);
+        setBraceletData(data);
+        
+        // Play audio alert if seizure is detected
+        if (data.seizure_detected && audioRef.current) {
+          audioRef.current.play().catch(e => console.error('Error playing audio:', e));
+        }
+      } catch (e) {
+        console.error('Error parsing message:', e);
       }
     });
 
-    
+    client.on('error', (err) => {
+      console.error('MQTT error:', err);
+      setConnectionStatus('Error: ' + err.message);
+    });
+
+    client.on('close', () => {
+      console.log('Connection closed');
+      setConnectionStatus('Disconnected');
+    });
+
+    client.on('offline', () => {
+      console.log('Client went offline');
+      setConnectionStatus('Offline');
+    });
+
+    client.on('reconnect', () => {
+      console.log('Client trying to reconnect');
+      setConnectionStatus('Reconnecting...');
+    });
+
     return () => {
       client.end();
     };
@@ -34,18 +89,63 @@ function App() {
 
   return (
     <div className="App">
-      <h1>SeizureSafe Bracelet Dashboard</h1>
-      
-      {/* Display heart rate */}
-      <div>
-        <h2>Heart Rate:</h2>
-        <p>{heartRate ? `${heartRate} bpm` : 'Waiting for heart rate data...'}</p>
-      </div>
+      <div className="dashboard">
+        <h1>SeizureSafe</h1>
+        <div className={`status-badge ${connectionStatus.toLowerCase()}`}>
+          {connectionStatus}
+        </div>
 
-      {/* Display fall detection status */}
-      <div>
-        <h2>Fall Detection:</h2>
-        <p>{fallDetected ? 'Fall detected!' : 'No fall detected'}</p>
+        <div className="grid-container">
+          <div className="card heart-rate">
+            <div className="card-header">
+              <h3>Heart Rate</h3>
+              <span className="timestamp">{braceletData.timestamp}</span>
+            </div>
+            <div className="card-content">
+              <div className="value">{braceletData.heart_rate}</div>
+              <div className="unit">BPM</div>
+              <div className="heart-rate-change">
+                {braceletData.heart_rate !== '--' && braceletData.previous_heart_rate !== '--' && (
+                  <span className={braceletData.heart_rate - braceletData.previous_heart_rate > 10 ? 'warning' : ''}>
+                    Change: {(braceletData.heart_rate - braceletData.previous_heart_rate).toFixed(1)} BPM
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className={`card seizure-status ${braceletData.seizure_detected ? 'emergency' : ''}`}>
+            <div className="card-header">
+              <h3>Seizure Detection</h3>
+            </div>
+            <div className="card-content">
+              <div className="status-text">
+                {braceletData.seizure_detected ? '🚨 SEIZURE DETECTED!' : 'No Seizure Detected'}
+              </div>
+              <div className="conditions">
+                {braceletData.fall_detected && <div>⚠️ Fall Detected</div>}
+                {braceletData.heart_rate - braceletData.previous_heart_rate > 10 && 
+                  <div>⚠️ Heart Rate Spike</div>
+                }
+              </div>
+            </div>
+          </div>
+
+          <div className="card battery">
+            <div className="card-header">
+              <h3>Battery Level</h3>
+            </div>
+            <div className="card-content">
+              <div className="battery-indicator">
+                <div 
+                  className="battery-level" 
+                  style={{width: `${braceletData.battery}%`}}
+                ></div>
+              </div>
+              <div className="battery-text">{braceletData.battery}%</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
