@@ -171,6 +171,7 @@ function App() {
   const [historicalData, setHistoricalData] = useState([]);
   const [seizureCount, setSeizureCount] = useState(0);
   
+  const [audioLoaded, setAudioLoaded] = useState(false);
   const audioRef = useRef(null);
   const [lastSeizureTime, setLastSeizureTime] = useState(0);
 
@@ -191,27 +192,28 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Initialize audio
+  // Initialize audio with better error handling
   useEffect(() => {
-    const audio = new Audio('/sounds/seizure_alert.mp3');
-    audio.volume = 1.0;
-    audio.preload = 'auto';
-    
-    // Test if audio can be played
-    const testAudio = () => {
-      audio.play()
-        .then(() => {
-          console.log('Audio test successful');
-          audio.pause();
-          audio.currentTime = 0;
-        })
-        .catch(error => {
-          console.error('Audio test failed:', error);
-        });
-    };
-    
-    audioRef.current = audio;
-    testAudio();
+    try {
+      const audio = new Audio();
+      audio.src = process.env.PUBLIC_URL + '/sounds/seizure_alert.mp3';
+      audio.preload = 'auto';
+      
+      // Add event listeners for better error handling
+      audio.addEventListener('canplaythrough', () => {
+        console.log('Audio file loaded successfully');
+        setAudioLoaded(true);
+      });
+
+      audio.addEventListener('error', (e) => {
+        console.error('Audio loading error:', e);
+        console.error('Audio error details:', audio.error);
+      });
+
+      audioRef.current = audio;
+    } catch (error) {
+      console.error('Error initializing audio:', error);
+    }
   }, []);
 
   useEffect(() => {
@@ -258,28 +260,44 @@ function App() {
           const currentTime = Date.now();
           if (currentTime - lastSeizureTime >= 8000) { // Prevent multiple plays within 8 seconds
             console.log('Seizure detected! Attempting to play audio...');
-            if (audioRef.current) {
-              // Reset audio to start
-              audioRef.current.currentTime = 0;
-              audioRef.current.play()
-                .then(() => {
-                  console.log('Audio played successfully');
-                  setLastSeizureTime(currentTime);
-                })
-                .catch(error => {
-                  console.error('Error playing audio:', error);
-                  // Try to play again after a short delay
-                  setTimeout(() => {
-                    audioRef.current.play()
-                      .then(() => {
-                        console.log('Audio played successfully on retry');
-                        setLastSeizureTime(currentTime);
-                      })
-                      .catch(error => console.error('Error playing audio on retry:', error));
-                  }, 500);
+            if (audioRef.current && audioLoaded) {
+              try {
+                // Reset audio to start
+                audioRef.current.currentTime = 0;
+                // Log the audio file status
+                console.log('Audio file status:', {
+                  src: audioRef.current.src,
+                  readyState: audioRef.current.readyState,
+                  paused: audioRef.current.paused,
+                  error: audioRef.current.error
                 });
+                
+                const playPromise = audioRef.current.play();
+                if (playPromise !== undefined) {
+                  playPromise
+                    .then(() => {
+                      console.log('Audio played successfully');
+                      setLastSeizureTime(currentTime);
+                    })
+                    .catch(error => {
+                      console.error('Detailed audio play error:', error);
+                      // Try playing without resetting time as fallback
+                      audioRef.current.play()
+                        .then(() => {
+                          console.log('Audio played successfully on fallback');
+                          setLastSeizureTime(currentTime);
+                        })
+                        .catch(error => console.error('Audio fallback failed:', error));
+                    });
+                }
+              } catch (error) {
+                console.error('Error attempting to play audio:', error);
+              }
             } else {
-              console.error('Audio element not initialized');
+              console.error('Audio not ready:', {
+                audioRef: !!audioRef.current,
+                audioLoaded: audioLoaded
+              });
             }
           }
         }
@@ -311,7 +329,7 @@ function App() {
     return () => {
       client.end();
     };
-  }, [lastSeizureTime]);
+  }, [lastSeizureTime, audioLoaded]);
 
   // Reset seizure count every 24 hours
   useEffect(() => {
