@@ -4,6 +4,7 @@ import time
 import logging
 import random
 import json
+from data_store import DataStore
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG,
@@ -16,6 +17,9 @@ PORT = 8084
 CLIENT_ID = "seizureSafe_backend_test"
 USERNAME = "ellenmcintyre123"
 PASSWORD = "Happy1234a!*"
+
+# Initialize data store
+data_store = DataStore()
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -36,24 +40,31 @@ def main():
         client.loop_start()
         
         # Initialize simulated data
-        heart_rate = 75
+        heart_rate = 65  # Start at average heart rate
         previous_heart_rate = heart_rate
         fall_detected = False
+        last_seizure_time = time.time()
         
         while True:
-            # Simulate heart rate changes (more dramatic changes now)
-            if random.random() < 0.1:  # 10% chance of significant change
-                heart_rate += random.uniform(-15, 15)
+            current_time = time.time()
+            
+            # Force a seizure every 10 seconds
+            if current_time - last_seizure_time >= 10:
+                # Simulate seizure: sudden heart rate increase and fall
+                heart_rate = 85  # 20 BPM above average
+                fall_detected = True
+                logger.warning("⚠️ TEST SEIZURE TRIGGERED!")
+                last_seizure_time = current_time
             else:
-                heart_rate += random.uniform(-2, 2)
-            
-            heart_rate = max(60, min(120, heart_rate))  # Allow higher max for spikes
-            
-            # Detect fall (5% chance)
-            fall_detected = random.random() < 0.05
+                # Normal heart rate simulation around 65 BPM
+                # Only allow very small variations
+                heart_rate = 65 + random.uniform(-2, 2)
+                # Strictly enforce the range
+                heart_rate = max(60, min(70, heart_rate))
+                fall_detected = False  # No falls except during seizures
             
             # Detect seizure conditions
-            heart_rate_spike = (heart_rate - previous_heart_rate) > 10
+            heart_rate_spike = heart_rate > 75  # More than 10 BPM above average
             seizure_detected = heart_rate_spike and fall_detected
             
             # Create data packet
@@ -62,12 +73,14 @@ def main():
                 "previous_heart_rate": round(previous_heart_rate, 1),
                 "fall_detected": fall_detected,
                 "seizure_detected": seizure_detected,
-                "battery": random.randint(80, 100),
                 "timestamp": time.strftime("%H:%M:%S")
             }
             
             # Store current heart rate for next comparison
             previous_heart_rate = heart_rate
+            
+            # Save data to database
+            data_store.save_data(data)
             
             # Publish data
             client.publish("seizureSafe/data", json.dumps(data), qos=1)

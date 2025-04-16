@@ -1,6 +1,162 @@
 import React, { useEffect, useState, useRef } from 'react';
 import mqtt from 'mqtt';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import './App.css';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
+function Dashboard({ connectionStatus, braceletData, historicalData }) {
+  // Prepare chart data
+  const chartData = {
+    labels: historicalData.map(data => data.timestamp),
+    datasets: [
+      {
+        label: 'Heart Rate',
+        data: historicalData.map(data => data.heart_rate),
+        borderColor: 'rgb(75, 192, 192)',
+        tension: 0.1
+      }
+    ]
+  };
+
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+      title: {
+        display: true,
+        text: 'Heart Rate History (Last 24 Hours)'
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: false,
+        title: {
+          display: true,
+          text: 'BPM'
+        }
+      }
+    }
+  };
+
+  return (
+    <div className="dashboard">
+      <h1>SeizureSafe Dashboard</h1>
+      <div className={`status-badge ${connectionStatus.toLowerCase()}`}>
+        {connectionStatus}
+      </div>
+
+      <div className="grid-container">
+        <div className="card heart-rate">
+          <div className="card-header">
+            <h3>Heart Rate</h3>
+            <span className="timestamp">{braceletData.timestamp}</span>
+          </div>
+          <div className="card-content">
+            <div className="value">{braceletData.heart_rate}</div>
+            <div className="unit">BPM</div>
+            <div className="heart-rate-change">
+              {braceletData.heart_rate !== '--' && braceletData.previous_heart_rate !== '--' && (
+                <span className={braceletData.heart_rate - braceletData.previous_heart_rate > 10 ? 'warning' : ''}>
+                  Change: {(braceletData.heart_rate - braceletData.previous_heart_rate).toFixed(1)} BPM
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className={`card seizure-status ${braceletData.seizure_detected ? 'emergency' : ''}`}>
+          <div className="card-header">
+            <h3>Seizure Detection</h3>
+          </div>
+          <div className="card-content">
+            <div className="status-text">
+              {braceletData.seizure_detected ? '🚨 SEIZURE DETECTED!' : 'No Seizure Detected'}
+            </div>
+            <div className="conditions">
+              {braceletData.fall_detected && <div>⚠️ Fall Detected</div>}
+              {braceletData.heart_rate - braceletData.previous_heart_rate > 10 && 
+                <div>⚠️ Heart Rate Spike</div>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="chart-container">
+        <Line data={chartData} options={chartOptions} />
+      </div>
+    </div>
+  );
+}
+
+function About() {
+  return (
+    <div className="about-page">
+      <h1>About SeizureSafe</h1>
+      <div className="about-content">
+        <section className="research-section">
+          <h2>Research on Seizures</h2>
+          <p>
+            Seizures are sudden, uncontrolled electrical disturbances in the brain that can cause changes in behavior, movements, feelings, and levels of consciousness. They are a common symptom of epilepsy, affecting approximately 50 million people worldwide.
+          </p>
+          <h3>Key Research Findings:</h3>
+          <ul>
+            <li>Heart rate typically increases by 10-20 BPM during a seizure</li>
+            <li>Falls are a common occurrence during seizures, leading to potential injuries</li>
+            <li>Early detection can significantly reduce the risk of injury</li>
+            <li>Most seizures last between 30 seconds to 2 minutes</li>
+          </ul>
+        </section>
+
+        <section className="technology-section">
+          <h2>Our Technology</h2>
+          <p>
+            SeizureSafe uses advanced sensor technology to monitor vital signs and detect potential seizure events. Our system combines:
+          </p>
+          <ul>
+            <li>Real-time heart rate monitoring</li>
+            <li>Fall detection using accelerometer data</li>
+            <li>Machine learning algorithms for pattern recognition</li>
+            <li>Immediate alert system for caregivers</li>
+          </ul>
+        </section>
+
+        <section className="safety-section">
+          <h2>Safety Features</h2>
+          <ul>
+            <li>24/7 monitoring and alert system</li>
+            <li>Historical data tracking for medical professionals</li>
+            <li>Customizable alert thresholds</li>
+            <li>Emergency contact notification system</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
@@ -12,14 +168,53 @@ function App() {
     battery: 100,
     timestamp: '--:--:--'
   });
+  const [historicalData, setHistoricalData] = useState([]);
+  const [seizureCount, setSeizureCount] = useState(0);
   
   const audioRef = useRef(null);
+  const [lastSeizureTime, setLastSeizureTime] = useState(0);
+
+  // Fetch historical data
+  useEffect(() => {
+    const fetchHistoricalData = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/history/24');
+        const data = await response.json();
+        setHistoricalData(data);
+      } catch (error) {
+        console.error('Error fetching historical data:', error);
+      }
+    };
+
+    fetchHistoricalData();
+    const interval = setInterval(fetchHistoricalData, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  // Initialize audio
+  useEffect(() => {
+    const audio = new Audio('/sounds/seizure_alert.mp3');
+    audio.volume = 1.0;
+    audio.preload = 'auto';
+    
+    // Test if audio can be played
+    const testAudio = () => {
+      audio.play()
+        .then(() => {
+          console.log('Audio test successful');
+          audio.pause();
+          audio.currentTime = 0;
+        })
+        .catch(error => {
+          console.error('Audio test failed:', error);
+        });
+    };
+    
+    audioRef.current = audio;
+    testAudio();
+  }, []);
 
   useEffect(() => {
-    // Create audio element for alerts
-    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-    audioRef.current = audio;
-    
     // MQTT connection options
     const options = {
       protocol: 'wss',
@@ -53,9 +248,40 @@ function App() {
         console.log('Received data:', data);
         setBraceletData(data);
         
+        // Update seizure count
+        if (data.seizure_detected) {
+          setSeizureCount(prev => prev + 1);
+        }
+        
         // Play audio alert if seizure is detected
-        if (data.seizure_detected && audioRef.current) {
-          audioRef.current.play().catch(e => console.error('Error playing audio:', e));
+        if (data.seizure_detected) {
+          const currentTime = Date.now();
+          if (currentTime - lastSeizureTime >= 8000) { // Prevent multiple plays within 8 seconds
+            console.log('Seizure detected! Attempting to play audio...');
+            if (audioRef.current) {
+              // Reset audio to start
+              audioRef.current.currentTime = 0;
+              audioRef.current.play()
+                .then(() => {
+                  console.log('Audio played successfully');
+                  setLastSeizureTime(currentTime);
+                })
+                .catch(error => {
+                  console.error('Error playing audio:', error);
+                  // Try to play again after a short delay
+                  setTimeout(() => {
+                    audioRef.current.play()
+                      .then(() => {
+                        console.log('Audio played successfully on retry');
+                        setLastSeizureTime(currentTime);
+                      })
+                      .catch(error => console.error('Error playing audio on retry:', error));
+                  }, 500);
+                });
+            } else {
+              console.error('Audio element not initialized');
+            }
+          }
         }
       } catch (e) {
         console.error('Error parsing message:', e);
@@ -85,69 +311,43 @@ function App() {
     return () => {
       client.end();
     };
+  }, [lastSeizureTime]);
+
+  // Reset seizure count every 24 hours
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSeizureCount(0);
+    }, 24 * 60 * 60 * 1000); // 24 hours in milliseconds
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="App">
-      <div className="dashboard">
-        <h1>SeizureSafe</h1>
-        <div className={`status-badge ${connectionStatus.toLowerCase()}`}>
-          {connectionStatus}
-        </div>
-
-        <div className="grid-container">
-          <div className="card heart-rate">
-            <div className="card-header">
-              <h3>Heart Rate</h3>
-              <span className="timestamp">{braceletData.timestamp}</span>
-            </div>
-            <div className="card-content">
-              <div className="value">{braceletData.heart_rate}</div>
-              <div className="unit">BPM</div>
-              <div className="heart-rate-change">
-                {braceletData.heart_rate !== '--' && braceletData.previous_heart_rate !== '--' && (
-                  <span className={braceletData.heart_rate - braceletData.previous_heart_rate > 10 ? 'warning' : ''}>
-                    Change: {(braceletData.heart_rate - braceletData.previous_heart_rate).toFixed(1)} BPM
-                  </span>
-                )}
-              </div>
-            </div>
+    <Router>
+      <div className="App">
+        <nav className="navbar">
+          <div className="nav-brand">SeizureSafe</div>
+          <div className="nav-links">
+            <Link to="/">Dashboard</Link>
+            <Link to="/about">About</Link>
           </div>
-
-          <div className={`card seizure-status ${braceletData.seizure_detected ? 'emergency' : ''}`}>
-            <div className="card-header">
-              <h3>Seizure Detection</h3>
-            </div>
-            <div className="card-content">
-              <div className="status-text">
-                {braceletData.seizure_detected ? '🚨 SEIZURE DETECTED!' : 'No Seizure Detected'}
-              </div>
-              <div className="conditions">
-                {braceletData.fall_detected && <div>⚠️ Fall Detected</div>}
-                {braceletData.heart_rate - braceletData.previous_heart_rate > 10 && 
-                  <div>⚠️ Heart Rate Spike</div>
-                }
-              </div>
-            </div>
+          <div className="seizure-counter">
+            24h Seizures: {seizureCount}
           </div>
+        </nav>
 
-          <div className="card battery">
-            <div className="card-header">
-              <h3>Battery Level</h3>
-            </div>
-            <div className="card-content">
-              <div className="battery-indicator">
-                <div 
-                  className="battery-level" 
-                  style={{width: `${braceletData.battery}%`}}
-                ></div>
-              </div>
-              <div className="battery-text">{braceletData.battery}%</div>
-            </div>
-          </div>
-        </div>
+        <Routes>
+          <Route path="/" element={
+            <Dashboard 
+              connectionStatus={connectionStatus}
+              braceletData={braceletData}
+              historicalData={historicalData}
+            />
+          } />
+          <Route path="/about" element={<About />} />
+        </Routes>
       </div>
-    </div>
+    </Router>
   );
 }
 
