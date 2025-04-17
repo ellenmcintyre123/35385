@@ -2,6 +2,8 @@ import paho.mqtt.client as mqtt
 import ssl
 import time
 import logging
+import json
+import random
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -13,7 +15,7 @@ BROKER = "ed733e7d.ala.eu-central-1.emqxsl.com"
 PORT = 8084  # Changed to WebSocket SSL port
 TOPIC = "seizureSafe/test"
 USERNAME = "ellenmcintyre123"
-PASSWORD = "Happy1234a!"
+PASSWORD = "Happy1234a!*"
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -35,7 +37,7 @@ def on_disconnect(client, userdata, rc):
 
 def main():
     client = mqtt.Client(client_id=f"backend_{int(time.time())}", 
-                        transport="websockets")  # Changed to use WebSockets
+                        transport="websockets")
     
     # Set credentials
     client.username_pw_set(USERNAME, PASSWORD)
@@ -56,14 +58,39 @@ def main():
         # Wait for connection
         time.sleep(2)
         
+        # Initialize heart rate
+        heart_rate = 75
+        seizure_counter = 0
+        
         while True:
-            message = f"Test message - {time.strftime('%H:%M:%S')}"
+            # Simulate heart rate changes
+            heart_rate += random.randint(-2, 2)
+            heart_rate = max(60, min(100, heart_rate))  # Keep between 60-100
+            
+            # Every 10 seconds, simulate a seizure
+            seizure_detected = (seizure_counter % 10) == 0
+            fall_detected = seizure_detected and random.random() < 0.3  # 30% chance of fall during seizure
+            
+            # Create data packet
+            data = {
+                "heart_rate": heart_rate,
+                "previous_heart_rate": heart_rate - random.randint(-2, 2),
+                "seizure_detected": seizure_detected,
+                "fall_detected": fall_detected,
+                "timestamp": time.strftime("%H:%M:%S")
+            }
+            
+            # Convert to JSON and publish
+            message = json.dumps(data)
             result = client.publish(TOPIC, message, qos=1)
+            
             if result.rc == 0:
                 logger.info(f"Published: {message}")
             else:
                 logger.error(f"Failed to publish message (code {result.rc})")
-            time.sleep(5)
+            
+            seizure_counter += 1
+            time.sleep(1)  # Send update every second
             
     except KeyboardInterrupt:
         logger.info("Shutting down...")

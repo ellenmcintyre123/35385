@@ -93,12 +93,12 @@ function Dashboard({ connectionStatus, braceletData, historicalData }) {
           </div>
           <div className="card-content">
             <div className="status-text">
-              {braceletData.seizure_detected ? '🚨 SEIZURE DETECTED!' : 'No Seizure Detected'}
+              {braceletData.seizure_detected ? 'SEIZURE DETECTED!' : 'No Seizure Detected'}
             </div>
             <div className="conditions">
-              {braceletData.fall_detected && <div>⚠️ Fall Detected</div>}
+              {braceletData.fall_detected && <div> Fall Detected</div>}
               {braceletData.heart_rate - braceletData.previous_heart_rate > 10 && 
-                <div>⚠️ Heart Rate Spike</div>
+                <div> Heart Rate Spike</div>
               }
             </div>
           </div>
