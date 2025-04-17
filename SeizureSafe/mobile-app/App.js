@@ -27,7 +27,7 @@ function DashboardScreen({ navigation }) {
     const client = new MQTT.Client('wss://ed733e7d.ala.eu-central-1.emqxsl.com:8084/mqtt', {
       clientId: 'mobile_' + Math.random().toString(16).substr(2, 8),
       username: 'ellenmcintyre123',
-      password: 'Happy1234a!',
+      password: 'Happy1234a!*',
       clean: true,
       rejectUnauthorized: false,
       reconnectPeriod: 2000,

@@ -195,19 +195,15 @@ function App() {
   // Initialize audio with better error handling
   useEffect(() => {
     try {
-      const audio = new Audio();
-      audio.src = process.env.PUBLIC_URL + '/sounds/seizure_alert.mp3';
+      const audio = new Audio('/sounds/seizure_alert.mp3');
       audio.preload = 'auto';
       
-      // Add event listeners for better error handling
       audio.addEventListener('canplaythrough', () => {
-        console.log('Audio file loaded successfully');
         setAudioLoaded(true);
       });
 
       audio.addEventListener('error', (e) => {
         console.error('Audio loading error:', e);
-        console.error('Audio error details:', audio.error);
       });
 
       audioRef.current = audio;
@@ -235,7 +231,7 @@ function App() {
     client.on('connect', () => {
       console.log('Connected to MQTT broker');
       setConnectionStatus('Connected');
-      client.subscribe('seizureSafe/data', (err) => {
+      client.subscribe('seizureSafe/test', (err) => {
         if (err) {
           console.error('Subscribe error:', err);
         } else {
@@ -247,57 +243,25 @@ function App() {
     client.on('message', (topic, message) => {
       try {
         const data = JSON.parse(message.toString());
-        console.log('Received data:', data);
         setBraceletData(data);
         
-        // Update seizure count
         if (data.seizure_detected) {
           setSeizureCount(prev => prev + 1);
-        }
-        
-        // Play audio alert if seizure is detected
-        if (data.seizure_detected) {
           const currentTime = Date.now();
-          if (currentTime - lastSeizureTime >= 8000) { // Prevent multiple plays within 8 seconds
-            console.log('Seizure detected! Attempting to play audio...');
+          if (currentTime - lastSeizureTime >= 15000) {
             if (audioRef.current && audioLoaded) {
               try {
-                // Reset audio to start
                 audioRef.current.currentTime = 0;
-                // Log the audio file status
-                console.log('Audio file status:', {
-                  src: audioRef.current.src,
-                  readyState: audioRef.current.readyState,
-                  paused: audioRef.current.paused,
-                  error: audioRef.current.error
-                });
-                
-                const playPromise = audioRef.current.play();
-                if (playPromise !== undefined) {
-                  playPromise
-                    .then(() => {
-                      console.log('Audio played successfully');
-                      setLastSeizureTime(currentTime);
-                    })
-                    .catch(error => {
-                      console.error('Detailed audio play error:', error);
-                      // Try playing without resetting time as fallback
-                      audioRef.current.play()
-                        .then(() => {
-                          console.log('Audio played successfully on fallback');
-                          setLastSeizureTime(currentTime);
-                        })
-                        .catch(error => console.error('Audio fallback failed:', error));
-                    });
-                }
+                audioRef.current.play()
+                  .then(() => {
+                    setLastSeizureTime(currentTime);
+                  })
+                  .catch(error => {
+                    console.error('Error playing audio:', error);
+                  });
               } catch (error) {
-                console.error('Error attempting to play audio:', error);
+                console.error('Error with audio playback:', error);
               }
-            } else {
-              console.error('Audio not ready:', {
-                audioRef: !!audioRef.current,
-                audioLoaded: audioLoaded
-              });
             }
           }
         }
