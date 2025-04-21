@@ -248,8 +248,8 @@ function App() {
   useEffect(() => {
     console.log('Setting up MQTT connection...');
     const client = mqtt.connect('wss://ed733e7d.ala.eu-central-1.emqxsl.com:8084/mqtt', {
-      username: 'ellenmcintyre123',
-      password: 'Happy1234a!*',
+      username: process.env.REACT_APP_MQTT_USERNAME,
+      password: process.env.REACT_APP_MQTT_PASSWORD,
       clientId: 'frontend_' + Math.random().toString(16).substr(2, 8),
       clean: true
     });

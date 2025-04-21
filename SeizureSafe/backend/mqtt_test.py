@@ -15,7 +15,7 @@ BROKER = "ed733e7d.ala.eu-central-1.emqxsl.com"
 PORT = 8084
 TOPIC = "seizureSafe/test"
 USERNAME = "ellenmcintyre123"
-PASSWORD = "Happy1234a!*"
+PASSWORD = ""
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
