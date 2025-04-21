@@ -58,4 +58,12 @@ class DataStore:
             'heart_rate': row[1],
             'fall_detected': bool(row[2]),
             'seizure_detected': bool(row[3])
-        } for row in data] 
+        } for row in data]
+
+    def clear_data(self):
+        """Clear all data from the database."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM seizure_data')
+        conn.commit()
+        conn.close() 

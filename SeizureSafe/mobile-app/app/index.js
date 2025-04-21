@@ -14,6 +14,7 @@ import {
 import { useRouter } from 'expo-router';
 import mqtt from 'precompiled-mqtt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
 
 // MQTT settings
 const BROKER = 'ed733e7d.ala.eu-central-1.emqxsl.com';
@@ -50,6 +51,7 @@ export default function App() {
   const [seizureCount, setSeizureCount] = useState(0);
   const [lastSeizureTime, setLastSeizureTime] = useState(0);
   const clientRef = useRef(null);
+  const [sound, setSound] = useState();
 
   // Load user session on startup
   useEffect(() => {
@@ -156,6 +158,64 @@ export default function App() {
     }
   };
 
+  // Initialize audio
+  useEffect(() => {
+    async function setupAudio() {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (error) {
+        console.error('Error setting up audio mode:', error);
+      }
+    }
+    setupAudio();
+  }, []);
+
+  async function playSeizureAlert() {
+    try {
+      console.log('Starting to load sound...');
+      
+      // First unload any existing sound
+      if (sound) {
+        console.log('Unloading previous sound...');
+        await sound.unloadAsync();
+      }
+
+      console.log('Creating new sound object...');
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../assets/seizure_alert.mp3'),
+        { shouldPlay: true },
+        (status) => {
+          console.log('Sound status update:', status);
+        }
+      );
+
+      console.log('Sound created successfully');
+      setSound(newSound);
+
+      console.log('Attempting to play sound...');
+      const playbackStatus = await newSound.playAsync();
+      console.log('Playback started:', playbackStatus);
+    } catch (error) {
+      console.error('Detailed error in playSeizureAlert:', error);
+      if (error.code) console.error('Error code:', error.code);
+      if (error.message) console.error('Error message:', error.message);
+    }
+  }
+
+  useEffect(() => {
+    return sound
+      ? () => {
+          console.log('Cleaning up sound...');
+          sound.unloadAsync();
+        }
+      : undefined;
+  }, [sound]);
+
   // MQTT connection effect
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -202,7 +262,7 @@ export default function App() {
         });
       });
 
-      client.on('message', (topic, message) => {
+      client.on('message', async (topic, message) => {
         try {
           const data = JSON.parse(message.toString());
           
@@ -211,7 +271,7 @@ export default function App() {
             
             if (data.seizure_detected) {
               const currentTime = Date.now();
-              if (currentTime - lastSeizureTime >= 15000) {
+              if (currentTime - lastSeizureTime >= 30000) {
                 setSeizureCount(prev => prev + 1);
                 setLastSeizureTime(currentTime);
                 Alert.alert(
@@ -219,6 +279,11 @@ export default function App() {
                   `A seizure has been detected.\nHeart Rate: ${data.heart_rate} BPM`,
                   [{ text: 'OK' }]
                 );
+                try {
+                  await playSeizureAlert();
+                } catch (error) {
+                  console.error('Error playing sound:', error);
+                }
               }
             }
           }
