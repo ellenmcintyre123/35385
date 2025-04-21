@@ -105,4 +105,4 @@ def main():
         logger.info("Disconnected from broker")
 
 if __name__ == "__main__":
-    main()
+    main() 
