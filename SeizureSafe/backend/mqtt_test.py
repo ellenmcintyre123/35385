@@ -4,18 +4,23 @@ import time
 import json
 import random
 import logging
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
                    format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# MQTT settings
-BROKER = "ed733e7d.ala.eu-central-1.emqxsl.com"
-PORT = 8084
-TOPIC = "seizureSafe/test"
-USERNAME = "ellenmcintyre123"
-PASSWORD = ""
+# MQTT settings from environment variables
+BROKER = os.getenv('MQTT_BROKER')
+PORT = int(os.getenv('MQTT_PORT', 8084))
+TOPIC = os.getenv('MQTT_TOPIC')
+USERNAME = os.getenv('MQTT_USERNAME')
+PASSWORD = os.getenv('MQTT_PASSWORD')
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -40,8 +45,12 @@ def main():
     client.username_pw_set(USERNAME, PASSWORD)
     
     # Set up TLS
-    client.tls_set(cert_reqs=ssl.CERT_NONE)
-    client.tls_insecure_set(True)
+    client.tls_set(
+        cert_reqs=ssl.CERT_REQUIRED,  # Require certificate verification
+        tls_version=ssl.PROTOCOL_TLS,  # Use latest TLS protocol
+        ciphers='ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384'  # Specify secure cipher suite
+    )
+    client.tls_insecure_set(False)  # Enforce secure connections
     
     try:
         logger.info(f"Connecting to {BROKER}:{PORT}")

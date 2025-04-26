@@ -6,6 +6,11 @@ import time
 import logging
 import json
 from data_store import DataStore
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -19,12 +24,12 @@ CORS(app)
 # Initialize data store
 store = DataStore()
 
-# MQTT settings
-BROKER = "ed733e7d.ala.eu-central-1.emqxsl.com"
-PORT = 8084
-TOPIC = "seizureSafe/test"
-USERNAME = "ellenmcintyre123"
-PASSWORD = "Happy1234a!*"
+# MQTT settings from environment variables
+BROKER = os.getenv('MQTT_BROKER')
+PORT = int(os.getenv('MQTT_PORT', 8084))
+TOPIC = os.getenv('MQTT_TOPIC')
+USERNAME = os.getenv('MQTT_USERNAME')
+PASSWORD = os.getenv('MQTT_PASSWORD')
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -49,15 +54,38 @@ def setup_mqtt():
     # Set credentials
     client.username_pw_set(USERNAME, PASSWORD)
     
-    # Set up TLS
-    client.tls_set(cert_reqs=ssl.CERT_NONE)
-    client.tls_insecure_set(True)
-    
+    # Set up secure TLS configuration
     try:
-        logger.info(f"Connecting to {BROKER}:{PORT}")
-        client.connect(BROKER, PORT, 60)
+        logger.info("Configuring TLS security...")
+        client.tls_set(
+            cert_reqs=ssl.CERT_REQUIRED,  # Require certificate verification
+            tls_version=ssl.PROTOCOL_TLS,  # Use latest TLS protocol
+            ciphers='ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384'  # Specify secure cipher suite
+        )
+        client.tls_insecure_set(False)  # Enforce secure connections
+        
+        logger.info("TLS security configured successfully")
+        logger.info(f"Attempting to connect to broker {BROKER}:{PORT}")
+        
+        
+        client.enable_logger(logger)
+        
+        # Connect with 30 second keepalive
+        client.connect(BROKER, PORT, keepalive=30)
         client.loop_start()
+        
+        # Wait connection
+        time.sleep(2)
+        if not client.is_connected():
+            logger.error("Failed to establish connection within timeout")
+            return None
+            
+        logger.info("Successfully connected and started MQTT loop")
         return client
+        
+    except ssl.SSLError as ssl_err:
+        logger.error(f"SSL/TLS configuration error: {ssl_err}")
+        return None
     except Exception as e:
         logger.error(f"Failed to connect to MQTT broker: {e}")
         return None

@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import mqtt from 'mqtt';
 import { Box, Typography, Alert } from '@mui/material';
 
+// MQTT configuration from environment variables
 const MQTT_CONFIG = {
-  broker: 'wss://ed733e7d.ala.eu-central-1.emqxsl.com:8084/mqtt',
+  broker: process.env.REACT_APP_MQTT_BROKER,
   options: {
-    username: 'seizuresafe',
-    password: 'seizuresafe123',
-    clientId: 'seizuresafe-web-' + Math.random().toString(16).substr(2, 8),
+    username: process.env.REACT_APP_MQTT_USERNAME,
+    password: process.env.REACT_APP_MQTT_PASSWORD,
+    protocol: 'wss',
+    port: process.env.REACT_APP_MQTT_PORT || 8084
   },
   topic: 'seizuresafe/data'
 };

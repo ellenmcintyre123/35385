@@ -5,17 +5,23 @@ import json
 import pyttsx3 #this for for the text to speech for the alert
 import logging
 import ssl
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO,
+                   format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# MQTT Configuration
-MQTT_BROKER = "ed733e7d.ala.eu-central-1.emqxsl.com"
-MQTT_PORT = 8883  # TLS/SSL port
-MQTT_TOPIC = "seizuresafe/data"
-MQTT_USERNAME = "seizuresafe"
-MQTT_PASSWORD = "seizuresafe123"
+# MQTT Configuration from environment variables
+MQTT_BROKER = os.getenv('MQTT_BROKER')
+MQTT_PORT = int(os.getenv('MQTT_PORT', 8883))
+MQTT_TOPIC = os.getenv('MQTT_TOPIC')
+MQTT_USERNAME = os.getenv('MQTT_USERNAME')
+MQTT_PASSWORD = os.getenv('MQTT_PASSWORD')
 
 def on_connect(client, userdata, flags, reason_code, properties=None):
     if reason_code == 0:

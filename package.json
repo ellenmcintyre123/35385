@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "react-native-paho-mqtt": "^0.1.1"
+  }
+}
