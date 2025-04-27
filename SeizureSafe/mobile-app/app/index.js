@@ -7,17 +7,18 @@ import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 import mqtt from 'mqtt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { REACT_APP_MQTT_BROKER, REACT_APP_MQTT_PORT, REACT_APP_MQTT_TOPIC, REACT_APP_MQTT_USERNAME, REACT_APP_MQTT_PASSWORD } from '@env';
 
 const BACKEND_URL = 'http://192.168.1.33';
 
 const Stack = createNativeStackNavigator();
 
 // MQTT settings
-const BROKER = 'ed733e7d.ala.eu-central-1.emqxsl.com';
-const PORT = 8084;
-const TOPIC = 'seizureSafe/test';
-const USERNAME = 'ellenmcintyre123';
-const PASSWORD = 'Happy1234a!*';
+const BROKER = REACT_APP_MQTT_BROKER;
+const PORT = Number(REACT_APP_MQTT_PORT);
+const TOPIC = REACT_APP_MQTT_TOPIC;
+const USERNAME = REACT_APP_MQTT_USERNAME;
+const PASSWORD = REACT_APP_MQTT_PASSWORD;
 
 // Predefined users for demo (in real app, this would be in a secure backend)
 const VALID_USERS = {

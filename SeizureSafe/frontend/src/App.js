@@ -26,11 +26,11 @@ ChartJS.register(
 );
 
 // MQTT config using env vars if available
-const MQTT_BROKER = process.env.REACT_APP_MQTT_BROKER || 'ed733e7d.ala.eu-central-1.emqxsl.com';
-const MQTT_PORT = process.env.REACT_APP_MQTT_PORT || '8084';
-const MQTT_USERNAME = process.env.REACT_APP_MQTT_USERNAME || 'ellenmcintyre123';
-const MQTT_PASSWORD = process.env.REACT_APP_MQTT_PASSWORD || 'Happy1234a!*';
-const MQTT_TOPIC = process.env.REACT_APP_MQTT_TOPIC || 'seizureSafe/test';
+const MQTT_BROKER = process.env.REACT_APP_MQTT_BROKER;
+const MQTT_PORT = process.env.REACT_APP_MQTT_PORT;
+const MQTT_USERNAME = process.env.REACT_APP_MQTT_USERNAME;
+const MQTT_PASSWORD = process.env.REACT_APP_MQTT_PASSWORD;
+const MQTT_TOPIC = process.env.REACT_APP_MQTT_TOPIC;
 
 export function Dashboard({ connectionStatus, braceletData, historicalData, onSaveGraph }) {
   // Prepare chart data (dots only, no line)
