@@ -1,5 +1,14 @@
 {
   "dependencies": {
-    "react-native-paho-mqtt": "^0.1.1"
+    "assert": "^2.1.0",
+    "buffer": "^6.0.3",
+    "events": "^3.3.0",
+    "mqtt": "^5.11.1",
+    "process": "^0.11.10",
+    "react-native-chart-kit": "^6.12.0",
+    "react-native-paho-mqtt": "^0.1.1",
+    "react-native-url-polyfill": "^2.0.0",
+    "stream-browserify": "^3.0.0",
+    "util": "^0.12.5"
   }
 }

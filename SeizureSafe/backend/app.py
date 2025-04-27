@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import paho.mqtt.client as mqtt
 import ssl
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Initialize data store
 store = DataStore()
@@ -30,6 +30,12 @@ PORT = int(os.getenv('MQTT_PORT', 8084))
 TOPIC = os.getenv('MQTT_TOPIC')
 USERNAME = os.getenv('MQTT_USERNAME')
 PASSWORD = os.getenv('MQTT_PASSWORD')
+
+# User database (replace with proper database in production)
+USERS = {
+    'testuser': 'testpass',  # In production, store hashed passwords
+    'admin': 'admin123'
+}
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -99,6 +105,48 @@ def get_history(hours):
     except Exception as e:
         logger.error(f"Error getting historical data: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "No data provided"}), 400
+            
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({"success": False, "message": "Username and password are required"}), 400
+            
+        if username in USERS and USERS[username] == password:
+            return jsonify({
+                "success": True, 
+                "message": "Login successful",
+                "user": {
+                    "username": username,
+                    "role": "user"
+                }
+            })
+        else:
+            return jsonify({"success": False, "message": "Invalid credentials"}), 401
+            
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        return jsonify({"success": False, "message": "Internal server error"}), 500
+
+@app.route('/api/latest', methods=['GET'])
+def get_latest_data():
+    try:
+        # Get the latest data from the store
+        latest_data = store.get_latest()
+        if latest_data:
+            return jsonify(latest_data)
+        else:
+            return jsonify({"message": "No data available"}), 404
+    except Exception as e:
+        logger.error(f"Error getting latest data: {str(e)}")
+        return jsonify({"message": "Internal server error"}), 500
 
 if __name__ == '__main__':
     mqtt_client = setup_mqtt()

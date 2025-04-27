@@ -24,63 +24,44 @@ PASSWORD = os.getenv('MQTT_PASSWORD')
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        logger.info("Connected successfully to MQTT broker")
+        logger.info("Connected to MQTT broker")
     else:
-        logger.error(f"Connection failed with code {rc}")
-
-def on_disconnect(client, userdata, rc):
-    if rc != 0:
-        logger.error(f"Unexpected disconnection: {rc}")
-
-def on_log(client, userdata, level, buf):
-    logger.debug(f"MQTT Log: {buf}")
+        logger.error(f"Connection failed: {rc}")
 
 def main():
     client = mqtt.Client(transport="websockets")
     client.on_connect = on_connect
-    client.on_disconnect = on_disconnect
-    client.on_log = on_log
     
-    # Set credentials
     client.username_pw_set(USERNAME, PASSWORD)
-    
-    # Set up TLS
-    client.tls_set(
-        cert_reqs=ssl.CERT_REQUIRED,  # Require certificate verification
-        tls_version=ssl.PROTOCOL_TLS,  # Use latest TLS protocol
-        ciphers='ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384'  # Specify secure cipher suite
-    )
-    client.tls_insecure_set(False)  # Enforce secure connections
-    
+    client.tls_set(cert_reqs=ssl.CERT_NONE)
+    client.tls_insecure_set(True)
+
     try:
-        logger.info(f"Connecting to {BROKER}:{PORT}")
+        logger.info(f"Attempting to connect to {BROKER}:{PORT}")
         client.connect(BROKER, PORT, 60)
         client.loop_start()
-        
-        # Initialize heart rate
-        heart_rate = 65  # Start at normal range
+
+        # Initialize simulated data
+        heart_rate = 65
         last_seizure_time = 0
-        seizure_in_progress = False
-        
+
         while True:
             current_time = time.time()
             
-            # Trigger seizure exactly every 20 seconds
-            if current_time - last_seizure_time >= 20 and not seizure_in_progress:
-                heart_rate = random.randint(85, 95)  # Spike above 85
+            # Force a seizure every 20 seconds
+            if current_time - last_seizure_time >= 20:
+                heart_rate = random.randint(85, 95)
                 seizure_detected = True
-                fall_detected = random.random() < 0.3  # 30% chance of fall during seizure
+                fall_detected = random.random() < 0.3
                 last_seizure_time = current_time
-                seizure_in_progress = True
                 logger.warning(f"SEIZURE DETECTED! Heart Rate: {heart_rate}")
             else:
-                # Normal heart rate simulation between 60-70
+                # Normal heart rate simulation around 65 BPM
                 heart_rate += random.randint(-2, 2)
-                heart_rate = max(60, min(70, heart_rate))  # Keep between 60-70
+                heart_rate = max(60, min(70, heart_rate))
                 seizure_detected = False
                 fall_detected = False
-                seizure_in_progress = False
-            
+
             # Create data packet
             data = {
                 "heart_rate": heart_rate,
@@ -89,25 +70,17 @@ def main():
                 "fall_detected": fall_detected,
                 "timestamp": time.strftime("%H:%M:%S")
             }
+
+            # Publish data
+            client.publish(TOPIC, json.dumps(data), qos=1)
+            logger.info(f"Published: {data}")
             
-            # Convert to JSON and publish
-            message = json.dumps(data)
-            result = client.publish(TOPIC, message, qos=1)
-            
-            if result.rc == 0:
-                if not seizure_detected:
-                    logger.info(f"Published: {message}")
-            else:
-                logger.error(f"Failed to publish message (code {result.rc})")
-            
-            # Sleep for 3 seconds
             time.sleep(3)
-            
+
     except KeyboardInterrupt:
         logger.info("Shutting down...")
     except Exception as e:
-        logger.error(f"Error occurred: {str(e)}")
-        raise
+        logger.error(f"Error: {str(e)}")
     finally:
         client.loop_stop()
         client.disconnect()

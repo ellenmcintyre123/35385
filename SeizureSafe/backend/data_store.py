@@ -66,4 +66,26 @@ class DataStore:
         cursor = conn.cursor()
         cursor.execute('DELETE FROM seizure_data')
         conn.commit()
-        conn.close() 
+        conn.close()
+
+    def get_latest_data(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT timestamp, heart_rate, previous_heart_rate, fall_detected, seizure_detected
+            FROM seizure_data
+            ORDER BY timestamp DESC
+            LIMIT 1
+        ''')
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                'timestamp': row[0],
+                'heart_rate': row[1],
+                'previous_heart_rate': row[2],
+                'fall_detected': bool(row[3]),
+                'seizure_detected': bool(row[4])
+            }
+        else:
+            return {} 

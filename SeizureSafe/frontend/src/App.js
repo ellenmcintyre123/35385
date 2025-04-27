@@ -25,17 +25,28 @@ ChartJS.register(
   Legend
 );
 
-export function Dashboard({ connectionStatus, braceletData, historicalData }) {
-  // Prepare chart data
+// MQTT config using env vars if available
+const MQTT_BROKER = process.env.REACT_APP_MQTT_BROKER || 'ed733e7d.ala.eu-central-1.emqxsl.com';
+const MQTT_PORT = process.env.REACT_APP_MQTT_PORT || '8084';
+const MQTT_USERNAME = process.env.REACT_APP_MQTT_USERNAME || 'ellenmcintyre123';
+const MQTT_PASSWORD = process.env.REACT_APP_MQTT_PASSWORD || 'Happy1234a!*';
+const MQTT_TOPIC = process.env.REACT_APP_MQTT_TOPIC || 'seizureSafe/test';
+
+export function Dashboard({ connectionStatus, braceletData, historicalData, onSaveGraph }) {
+  // Prepare chart data (dots only, no line)
   const chartData = {
     labels: historicalData.map(data => data.timestamp).reverse(),
     datasets: [
       {
-        label: 'Heart Rate',
-        data: historicalData.map(data => data.heart_rate).reverse(),
+        label: 'Heart Rate (BPM)',
+        data: historicalData.map(data => parseFloat(data.heart_rate)).reverse(),
         borderColor: 'rgb(75, 192, 192)',
-        tension: 0.4,
-        pointRadius: 2
+        backgroundColor: 'rgb(75, 192, 192)',
+        showLine: false, // Only dots
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        fill: false,
+        type: 'scatter',
       }
     ]
   };
@@ -49,21 +60,40 @@ export function Dashboard({ connectionStatus, braceletData, historicalData }) {
       },
       title: {
         display: true,
-        text: 'Heart Rate History'
+        text: 'Heart Rate (Last 24 Hours)'
       }
     },
     scales: {
       y: {
         beginAtZero: false,
-        min: 50,
-        max: 100,
-        grid: {
-          color: 'rgba(0, 0, 0, 0.1)'
+        title: {
+          display: true,
+          text: 'Heart Rate (BPM)'
+        }
+      },
+      x: {
+        title: {
+          display: true,
+          text: 'Time'
         }
       }
     },
     animation: {
-      duration: 0 // Disable animations for smoother updates
+      duration: 0
+    }
+  };
+
+  // Ref for saving the chart
+  const chartRef = useRef();
+
+  const handleSaveGraph = () => {
+    if (chartRef.current) {
+      const chartInstance = chartRef.current;
+      const url = chartInstance.toBase64Image();
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'heart_rate_graph.png';
+      link.click();
     }
   };
 
@@ -112,7 +142,8 @@ export function Dashboard({ connectionStatus, braceletData, historicalData }) {
       </div>
 
       <div className="chart-container" style={{ height: '400px', marginTop: '20px' }}>
-        <Line data={chartData} options={chartOptions} />
+        <Line ref={chartRef} data={chartData} options={chartOptions} />
+        <button onClick={handleSaveGraph} style={{marginTop: '10px'}}>Save Graph as Image</button>
       </div>
     </div>
   );
@@ -185,105 +216,116 @@ function App() {
     setHistoricalData([]);
   }, []);
 
-  // MQTT message handling
-  const handleMQTTMessage = useCallback((topic, message) => {
+  // Initialize audio with better error handling
+  useEffect(() => {
     try {
-      const data = JSON.parse(message.toString());
-      console.log('Received MQTT data:', data);
-      
-      // Update current data
-      setBraceletData(data);
-      
-      // Update historical data
-      setHistoricalData(prevData => {
-        // Create new data point
-        const newPoint = {
-          timestamp: data.timestamp,
-          heart_rate: Number(data.heart_rate), // Ensure it's a number
-          fall_detected: data.fall_detected,
-          seizure_detected: data.seizure_detected
-        };
+      const audio = new Audio('/sounds/seizure_alert.mp3');
+      audio.preload = 'auto';
 
-        // Add new point to the beginning of the array
-        const updatedData = [newPoint, ...prevData];
-        
-        // Keep only the last 20 points
-        const trimmedData = updatedData.slice(0, 20);
-        
-        console.log('New heart rate point:', newPoint.heart_rate);
-        console.log('Updated historical data:', trimmedData);
-        
-        return trimmedData;
+      // Add event listeners for better error handling
+      audio.addEventListener('canplaythrough', () => {
+        console.log('Audio file loaded successfully');
+        setAudioReady(true);
       });
 
-      // Handle seizure detection
-      if (data.seizure_detected) {
-        console.log('Seizure detected!');
-        setSeizureCount(prev => prev + 1);
-        
-        const currentTime = Date.now();
-        if (currentTime - lastSeizureTime >= 30000) {
-          console.log('Playing audio alert...');
-          if (audioRef.current && audioReady) {
-            audioRef.current.currentTime = 0;
-            audioRef.current.play()
-              .then(() => console.log('Audio played successfully'))
-              .catch(error => {
-                console.error('Audio play error:', error);
-                if (error.name === 'NotAllowedError') {
-                  setShowAudioPrompt(true);
-                  setAudioReady(false);
-                }
-              });
-          }
-          setLastSeizureTime(currentTime);
-        }
-      }
+      audio.addEventListener('error', (e) => {
+        console.error('Audio loading error:', e);
+        console.error('Audio error details:', audio.error);
+      });
+
+      audioRef.current = audio;
     } catch (error) {
-      console.error('Error handling MQTT message:', error);
+      console.error('Error initializing audio:', error);
     }
-  }, [lastSeizureTime, audioReady]);
+  }, []);
 
   // MQTT connection
   useEffect(() => {
-    console.log('Setting up MQTT connection...');
-    const client = mqtt.connect('wss://ed733e7d.ala.eu-central-1.emqxsl.com:8084/mqtt', {
-      username: process.env.REACT_APP_MQTT_USERNAME,
-      password: process.env.REACT_APP_MQTT_PASSWORD,
+    console.log('Connecting to MQTT broker:', MQTT_BROKER, MQTT_PORT);
+    const client = mqtt.connect(`wss://${MQTT_BROKER}:${MQTT_PORT}/mqtt`, {
       clientId: 'frontend_' + Math.random().toString(16).substr(2, 8),
-      clean: true
+      username: MQTT_USERNAME,
+      password: MQTT_PASSWORD,
+      clean: true,
+      rejectUnauthorized: false,
+      reconnectPeriod: 2000,
     });
 
     client.on('connect', () => {
       console.log('Connected to MQTT broker');
       setConnectionStatus('Connected');
-      client.subscribe('seizureSafe/test', (err) => {
+      client.subscribe(MQTT_TOPIC, (err) => {
         if (err) {
           console.error('Subscribe error:', err);
         } else {
-          console.log('Subscribed to seizureSafe/test');
+          console.log('Successfully subscribed to topic:', MQTT_TOPIC);
         }
       });
     });
 
-    client.on('message', handleMQTTMessage);
+    client.on('message', (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        console.log('Received data:', data);
+        setBraceletData(data);
+        setHistoricalData(prev => {
+          const now = new Date();
+          const newData = [...prev, data].filter(d => {
+            // Parse timestamp as today if not present
+            const t = d.timestamp ? new Date(now.toDateString() + ' ' + d.timestamp) : now;
+            return now - t <= 24 * 60 * 60 * 1000;
+          });
+          return newData;
+        });
+        // Update seizure count
+        if (data.seizure_detected) {
+          setSeizureCount(prev => prev + 1);
+        }
+        // Play audio alert if seizure is detected
+        if (data.seizure_detected) {
+          const currentTime = Date.now();
+          if (currentTime - lastSeizureTime >= 15000) {
+            if (audioRef.current && audioReady) {
+              try {
+                audioRef.current.currentTime = 0;
+                audioRef.current.play()
+                  .then(() => {
+                    setLastSeizureTime(currentTime);
+                  })
+                  .catch(error => {
+                    console.error('Error playing audio:', error);
+                  });
+              } catch (error) {
+                console.error('Error with audio playback:', error);
+              }
+            } else {
+              console.error('Audio not ready:', {
+                audioRef: !!audioRef.current,
+                audioReady: audioReady
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error processing message:', error);
+      }
+    });
 
-    client.on('error', (error) => {
-      console.error('MQTT error:', error);
+    client.on('error', (err) => {
+      console.error('MQTT Error:', err);
       setConnectionStatus('Error');
     });
 
+    client.on('close', () => {
+      console.log('MQTT Connection closed');
+      setConnectionStatus('Disconnected');
+    });
+
     return () => {
+      console.log('Cleaning up MQTT connection...');
       client.end();
     };
-  }, [handleMQTTMessage]);
-
-  // Initialize audio
-  useEffect(() => {
-    const audio = new Audio(process.env.PUBLIC_URL + '/sounds/seizure_alert.mp3');
-    audio.preload = 'auto';
-    audioRef.current = audio;
-  }, []);
+  }, [lastSeizureTime, audioReady]);
 
   // Handle user interaction to enable audio
   const handleEnableAudio = useCallback(async () => {
